@@ -29,7 +29,7 @@ The following files are included, along with the KiCAD project:
 PIC12F1822（U7）can be programmed with ```osc1536.hex``` found in [SBC6800 datapack](https://github.com/nickbeee/sbc6802/blob/master/sbc6800_datapack.zip) to generate the clock for 6850 ACIA. The serial port will operate at 9600 bps.
 ## SBC-Bus
 
-The bus connector J1 supports [SBC-Bus 2.0](https://store.shopping.yahoo.co.jp/orangepicoshop/pico-a-008.html). Pin 38 is routed to 6802 VMA.
+The bus connector J1 supports [SBC-Bus 2.0](https://sbc738827564.wordpress.com/2018/08/11/sbc-bus-rev02/). Pin 38 is routed to 6802 VMA.
 
 If the board is not connected to the SBC-Bus, connect the 5V and GND pins to a +5V regulated power supply.
 
