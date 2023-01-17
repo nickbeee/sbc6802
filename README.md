@@ -41,7 +41,7 @@ Most of the 6800 software found in [SBC6800 datapack](https://github.com/nickbee
 
 * [SBC6800](https://www.switch-science.com/catalog/3581/) / [Technical Data PDF](http://www.amy.hi-ho.ne.jp/officetetsu/storage/en/sbc6800_techdata.pdf)
 * [SBC6809](https://www.switch-science.com/catalog/3583/)
-* [SBC-Bus 2.0](https://store.shopping.yahoo.co.jp/orangepicoshop/pico-a-008.html)
+* [SBC-Bus 2.0](https://sbc738827564.wordpress.com/2018/08/11/sbc-bus-rev02/)
 * [as0 Motorola 6800 Assembler](https://github.com/JimInCA/motorola-6800-assembler)
 * [M6800 Assembly VSCode Extension](https://marketplace.visualstudio.com/items?itemName=RyuStudio.m6800-as0)
 
