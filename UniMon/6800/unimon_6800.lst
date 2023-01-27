@@ -1,0 +1,1558 @@
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 1 - 01/05/23 16:58:03
+
+
+       1/       0 :                     ;;;
+       2/       0 :                     ;;; Universal Monitor 6800
+       3/       0 :                     ;;; 
+       4/       0 :                     
+       5/       0 :                     	CPU	6800
+       6/       0 :                     
+       7/       0 : ="MC6800"            TARGET:	equ	"MC6800"
+       8/       0 :                     
+       9/       0 :                     
+      10/       0 :                     	INCLUDE	"config.inc"
+(1)    1/       0 :                     ;;; -*- asm -*-
+(1)    2/       0 :                     ;;;
+(1)    3/       0 :                     ;;; Universal Monitor 6800 config file (sample)
+(1)    4/       0 :                     ;;;
+(1)    5/       0 :                     
+(1)    6/       0 :                     ;;;
+(1)    7/       0 :                     ;;; Memory
+(1)    8/       0 :                     ;;;
+(1)    9/       0 :                     	
+(1)   10/       0 : =$E000               ROM_B:	equ	$E000		; ROM begin
+(1)   11/       0 : =$FF80               ENTRY:	EQU	$FF80		; Entry point
+(1)   12/       0 :                     	
+(1)   13/       0 : =$C0                 WORK_B:	equ	$00C0		; WORK area begin
+(1)   14/       0 : =$FF                 STACK:	equ	$00FF		; Stack end
+(1)   15/       0 :                     
+(1)   16/       0 : =$10                 BUFLEN:	EQU	16		; Buffer length ( 16 or above )
+(1)   17/       0 :                     
+(1)   18/       0 :                     ;;;
+(1)   19/       0 :                     ;;; Options
+(1)   20/       0 :                     ;;;
+(1)   21/       0 :                     
+(1)   22/       0 : =$1                  USE_IDENT = 1			; CPU Identification
+(1)   23/       0 :                     
+(1)   24/       0 : =$1                  USE_REGCMD = 1			; Register related commands
+(1)   25/       0 :                     
+(1)   26/       0 :                     ;;;
+(1)   27/       0 :                     ;;; Motorola MC6850
+(1)   28/       0 :                     ;;;
+(1)   29/       0 :                     
+(1)   30/       0 : =$1                  USE_DEV_6850 = 1
+(1)   31/       0 : =>TRUE                	IF USE_DEV_6850
+(1)   32/       0 :                      	;; ACIA
+(1)   33/       0 : =$8018               ACIAC:	equ	$8018		; Control / Status Register
+(1)   34/       0 : =$8019               ACIAD:	equ	$8019		; Data Register
+(1)   35/       0 : =$15                 ACCR_V:	EQU	$15		; Control: x16, 8-bit, N, 1
+(1)   36/       0 : [31]                  	ENDIF
+(1)   37/       0 :                     
+(1)   38/       0 :                     ;;;
+(1)   39/       0 :                     ;;; Motorola MC6801/3 (Embedded UART)
+(1)   40/       0 :                     ;;;
+(1)   41/       0 :                     	
+(1)   42/       0 : =$0                  USE_DEV_6801 = 0
+(1)   43/       0 : =>FALSE              	IF USE_DEV_6801
+(1)   44/       0 :                     	;; 6801/6803 Internal
+(1)   45/       0 :                     RMCR:	EQU	$0010		; Rate and Mode Control Register
+(1)   46/       0 :                     RMCR_V:	EQU	$05		; CC[1:0]=01, SS[1:0]=01
+(1)   47/       0 :                     TRCSR:	EQU	$0011		; Transmit/Receive Control and Status Register
+(1)   48/       0 :                     RDR:	EQU	$0012		; Receive Data Register
+(1)   49/       0 :                     TDR:	EQU	$0013		; Transmit Data Register
+(1)   50/       0 : [43]                 	ENDIF
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm(config.inc) - Page 2 - 01/05/23 16:58:03
+
+
+(1)   51/       0 :                     
+      11/       0 :                     
+      12/       0 :                     	INCLUDE	"../common.inc"
+(1)    1/       0 :                     ;;; -*- asm -*-
+(1)    2/       0 :                     ;;;
+(1)    3/       0 :                     ;;; Common header file
+(1)    4/       0 :                     ;;;
+(1)    5/       0 :                     
+(1)    6/       0 :                     	RELAXED	ON
+(1)    7/       0 :                     
+(1)    8/       0 :                     ;;; Constants
+(1)    9/       0 : =$D                  CR:	EQU	0x0D
+(1)   10/       0 : =$A                  LF:	EQU	0x0A
+(1)   11/       0 : =$8                  BS:	EQU	0x08
+(1)   12/       0 : =$7F                 DEL:	EQU	0x7F
+(1)   13/       0 :                     
+(1)   14/       0 :                     ;;; Functions
+(1)   15/       0 :                     low	function	x,(x & 255)
+(1)   16/       0 :                     high	function	x,(x >> 8)
+(1)   17/       0 :                     
+(1)   18/       0 :                     	RELAXED	OFF
+(1)   19/       0 :                     
+      13/       0 :                     
+      14/       0 :                     ;;;
+      15/       0 :                     ;;; ROM area
+      16/       0 :                     ;;;
+      17/       0 :                     	
+      18/    E000 :                     	ORG	ROM_B
+      19/    E000 :                     
+      20/    E000 :                     CSTART:
+      21/    E000 : 8E 00 FF            	LDS	#STACK
+      22/    E003 : BD E7 53            	JSR	INIT
+      23/    E006 :                     
+      24/    E006 : CE 00 00            	LDX	#$0000
+      25/    E009 : DF D0               	STX	DSADDR
+      26/    E00B : DF D7               	STX	SADDR
+      27/    E00D : DF D5               	STX	GADDR
+      28/    E00F : 86 53               	LDAA	#'S'
+      29/    E011 : 97 D9               	STAA	HEXMOD
+      30/    E013 : 7F 00 DB            	CLR	PSPEC
+      31/    E016 : =>TRUE               	IF USE_REGCMD
+      32/    E016 : 7F 00 DC            	CLR	REGA
+      33/    E019 : 7F 00 DD            	CLR	REGB
+      34/    E01C : DF DE               	STX	REGX
+      35/    E01E : 9F E0               	STS	REGSP
+      36/    E020 : DF E2               	STX	REGPC
+      37/    E022 : 86 C0               	LDAA	#$C0
+      38/    E024 : 97 E4               	STAA	REGCC
+      39/    E026 : [31]                 	ENDIF
+      40/    E026 :                     	
+      41/    E026 :                     	;; Opening message
+      42/    E026 : CE E6 6A            	LDX	#OPNMSG
+      43/    E029 : BD E5 4F            	JSR	STROUT
+      44/    E02C :                     
+      45/    E02C :                     	;; CPU identification
+      46/    E02C : =>TRUE               	IF USE_IDENT
+      47/    E02C : CE 55 AA            	LDX	#$55AA
+      48/    E02F : C6 64               	LDAB	#100
+      49/    E031 : 86 05               	LDAA	#5
+      50/    E033 : 8B 05               	ADDA	#5
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 3 - 01/05/23 16:58:03
+
+
+      51/    E035 : 18                  	FCB	$18		; DAA on 6800, ABA on 6803, XGDX on 6303
+      52/    E036 : 81 55               	CMPA	#$55
+      53/    E038 : 27 1F               	BEQ	ID_6301
+      54/    E03A : 81 6E               	CMPA	#110
+      55/    E03C : 27 14               	BEQ	ID_6801
+      56/    E03E : 81 10               	CMPA	#$10
+      57/    E040 : 26 25               	BNE	ID_UK
+      58/    E042 :                     
+      59/    E042 : CE FF FF            	LDX	#$FFFF
+      60/    E045 : EC 01               	FCB	$EC,$01		; CPX $01,X on 6800, ADX $01 on MB8861
+      61/    E047 : 8C 00 00            	CPX	#$0000
+      62/    E04A : 27 14               	BEQ	ID_8861
+      63/    E04C :                     	;; MC6800
+      64/    E04C : CE E6 D6            	LDX	#IM6800
+      65/    E04F : 4F                  	CLRA
+      66/    E050 : 20 1C               	BRA	IDE
+      67/    E052 :                     	;; MC6801/MC6803
+      68/    E052 :                     ID_6801:
+      69/    E052 : CE E6 DF            	LDX	#IM6801
+      70/    E055 : 86 01               	LDAA	#$01
+      71/    E057 : 20 15               	BRA	IDE
+      72/    E059 :                     	;; HD6301/HD6303
+      73/    E059 :                     ID_6301:
+      74/    E059 : CE E6 E8            	LDX	#IM6301
+      75/    E05C : 86 03               	LDAA	#$03
+      76/    E05E : 20 0E               	BRA	IDE
+      77/    E060 :                     	;; MB8861/MB8870
+      78/    E060 :                     ID_8861:
+      79/    E060 : CE E6 F1            	LDX	#IM8861
+      80/    E063 : 86 04               	LDAA	#$04
+      81/    E065 : 20 07               	BRA	IDE
+      82/    E067 :                     	;; Unknown
+      83/    E067 :                     ID_UK:	
+      84/    E067 : BD E5 5D            	JSR	HEXOUT2
+      85/    E06A : CE E6 CC            	LDX	#IMUK
+      86/    E06D : 4F                  	CLRA
+      87/    E06E :                     IDE:
+      88/    E06E : 97 DB               	STAA	PSPEC
+      89/    E070 : BD E5 4F            	JSR	STROUT
+      90/    E073 : [46]                 	ENDIF
+      91/    E073 :                     
+      92/    E073 :                     WSTART:
+      93/    E073 : CE E6 85            	LDX	#PROMPT
+      94/    E076 : BD E5 4F            	JSR	STROUT
+      95/    E079 : BD E5 A2            	JSR	GETLIN
+      96/    E07C : CE 00 C0            	LDX	#INBUF
+      97/    E07F : BD E5 E9            	JSR	SKIPSP
+      98/    E082 : BD E5 F3            	JSR	UPPER
+      99/    E085 : 4D                  	TSTA
+     100/    E086 : 27 EB               	BEQ	WSTART
+     101/    E088 : 81 44               	CMPA	#'D'
+     102/    E08A : 26 03               	BNE	M00
+     103/    E08C : 7E E0 BA            	JMP	DUMP
+     104/    E08F :                     M00:	
+     105/    E08F : 81 47               	CMPA	#'G'
+     106/    E091 : 26 03               	BNE	M01
+     107/    E093 : 7E E1 D9            	JMP	GO
+     108/    E096 :                     M01:	
+     109/    E096 : 81 53               	CMPA	#'S'
+     110/    E098 : 26 03               	BNE	M02
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 4 - 01/05/23 16:58:03
+
+
+     111/    E09A : 7E E2 0C            	JMP	SETM
+     112/    E09D :                     
+     113/    E09D :                     M02:	
+     114/    E09D : 81 4C               	CMPA	#'L'
+     115/    E09F : 26 03               	BNE	M03
+     116/    E0A1 : 7E E2 74            	JMP	LOADH
+     117/    E0A4 :                     M03:	
+     118/    E0A4 : 81 50               	CMPA	#'P'
+     119/    E0A6 : 26 03               	BNE	M04
+     120/    E0A8 : 7E E3 65            	JMP	SAVEH
+     121/    E0AB :                     
+     122/    E0AB :                     M04:
+     123/    E0AB : =>TRUE               	IF USE_REGCMD
+     124/    E0AB : 81 52               	CMPA	#'R'
+     125/    E0AD : 26 03               	BNE	M05
+     126/    E0AF : 7E E4 76            	JMP	REG
+     127/    E0B2 : [123]                	ENDIF
+     128/    E0B2 :                     M05:	
+     129/    E0B2 :                     ERR:
+     130/    E0B2 : CE E6 A2            	LDX	#ERRMSG
+     131/    E0B5 : BD E5 4F            	JSR	STROUT
+     132/    E0B8 : 20 B9               	BRA	WSTART
+     133/    E0BA :                     
+     134/    E0BA :                     ;;;
+     135/    E0BA :                     ;;; Dump memory
+     136/    E0BA :                     ;;;
+     137/    E0BA :                     DUMP:
+     138/    E0BA : 08                  	INX
+     139/    E0BB : BD E5 E9            	JSR	SKIPSP
+     140/    E0BE : BD E5 FE            	JSR	RDHEX		; 1st arg.
+     141/    E0C1 : 5D                  	TSTB
+     142/    E0C2 : 26 15               	BNE	DP0
+     143/    E0C4 :                     	;; No arg.
+     144/    E0C4 : BD E5 E9            	JSR	SKIPSP
+     145/    E0C7 : A6 00               	LDAA	,X
+     146/    E0C9 : 26 E7               	BNE	ERR
+     147/    E0CB : 96 D1               	LDAA	DSADDR+1	; DEADDR = DSADDR + 128
+     148/    E0CD : 8B 80               	ADDA	#128
+     149/    E0CF : 97 D3               	STAA	DEADDR+1
+     150/    E0D1 : 96 D0               	LDAA	DSADDR
+     151/    E0D3 : 89 00               	ADCA	#0
+     152/    E0D5 : 97 D2               	STAA	DEADDR
+     153/    E0D7 : 20 38               	BRA	DPM
+     154/    E0D9 :                     	;; 1st arg. found
+     155/    E0D9 :                     DP0:
+     156/    E0D9 : 96 E6               	LDAA	RHVAL+1		; DSADDR = RHVAL
+     157/    E0DB : 97 D1               	STAA	DSADDR+1
+     158/    E0DD : 96 E5               	LDAA	RHVAL
+     159/    E0DF : 97 D0               	STAA	DSADDR
+     160/    E0E1 : BD E5 E9            	JSR	SKIPSP
+     161/    E0E4 : A6 00               	LDAA	,X
+     162/    E0E6 : 81 2C               	CMPA	#','
+     163/    E0E8 : 27 11               	BEQ	DP1
+     164/    E0EA : 4D                  	TSTA
+     165/    E0EB : 26 C5               	BNE	ERR
+     166/    E0ED :                     	;; No 2nd arg.
+     167/    E0ED : 96 D1               	LDAA	DSADDR+1	; DEADDR = DSADDR + 128
+     168/    E0EF : 8B 80               	ADDA	#128
+     169/    E0F1 : 97 D3               	STAA	DEADDR+1
+     170/    E0F3 : 96 D0               	LDAA	DSADDR
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 5 - 01/05/23 16:58:03
+
+
+     171/    E0F5 : 89 00               	ADCA	#0
+     172/    E0F7 : 97 D2               	STAA	DEADDR
+     173/    E0F9 : 20 16               	BRA	DPM
+     174/    E0FB :                     	;;
+     175/    E0FB :                     DP1:
+     176/    E0FB : 08                  	INX
+     177/    E0FC : BD E5 E9            	JSR	SKIPSP
+     178/    E0FF : BD E5 FE            	JSR	RDHEX
+     179/    E102 : BD E5 E9            	JSR	SKIPSP
+     180/    E105 : 5D                  	TSTB
+     181/    E106 : 27 AA               	BEQ	ERR
+     182/    E108 : 6D 00               	TST	,X
+     183/    E10A : 26 A6               	BNE	ERR
+     184/    E10C : DE E5               	LDX	RHVAL
+     185/    E10E : 08                  	INX
+     186/    E10F : DF D2               	STX	DEADDR
+     187/    E111 :                     	;; DUMP main
+     188/    E111 :                     DPM:
+     189/    E111 : 96 D1               	LDAA	DSADDR+1
+     190/    E113 : 84 F0               	ANDA	#$F0
+     191/    E115 : 97 E8               	STAA	DMPPT+1
+     192/    E117 : 96 D0               	LDAA	DSADDR
+     193/    E119 : 97 E7               	STAA	DMPPT
+     194/    E11B : 7F 00 D4            	CLR	DSTATE
+     195/    E11E :                     DPM0:
+     196/    E11E : 8D 24               	BSR	DPL
+     197/    E120 :                     	;; DMPPT already incremented during DPB
+     198/    E120 :                     	;; Do not need to +16 here
+     199/    E120 : BD E7 6B            	JSR	CONST
+     200/    E123 : 26 11               	BNE	DPM1
+     201/    E125 : 96 D4               	LDAA	DSTATE
+     202/    E127 : 81 02               	CMPA	#2
+     203/    E129 : 25 F3               	BCS	DPM0
+     204/    E12B : 96 D3               	LDAA	DEADDR+1
+     205/    E12D : 97 D1               	STAA	DSADDR+1
+     206/    E12F : 96 D2               	LDAA	DEADDR
+     207/    E131 : 97 D0               	STAA	DSADDR
+     208/    E133 : 7E E0 73            	JMP	WSTART
+     209/    E136 :                     DPM1:
+     210/    E136 : 96 E8               	LDAA	DMPPT+1
+     211/    E138 : 97 D1               	STAA	DSADDR+1
+     212/    E13A : 96 E7               	LDAA	DMPPT
+     213/    E13C : 97 D0               	STAA	DSADDR
+     214/    E13E : BD E7 60            	JSR	CONIN
+     215/    E141 : 7E E0 73            	JMP	WSTART
+     216/    E144 :                     
+     217/    E144 :                     	;; Dump line
+     218/    E144 :                     DPL:
+     219/    E144 : 96 E7               	LDAA	DMPPT
+     220/    E146 : D6 E8               	LDAB	DMPPT+1
+     221/    E148 : BD E5 5A            	JSR	HEXOUT4
+     222/    E14B : CE E6 AA            	LDX	#DSEP0
+     223/    E14E : BD E5 4F            	JSR	STROUT
+     224/    E151 : CE 00 C0            	LDX	#INBUF
+     225/    E154 : DF E9               	STX	ASCPT
+     226/    E156 : C6 10               	LDAB	#16
+     227/    E158 :                     DPL0:
+     228/    E158 : 8D 29               	BSR	DPB
+     229/    E15A : 5A                  	DECB
+     230/    E15B : 26 FB               	BNE	DPL0
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 6 - 01/05/23 16:58:03
+
+
+     231/    E15D :                     
+     232/    E15D : CE E6 AD            	LDX	#DSEP1
+     233/    E160 : BD E5 4F            	JSR	STROUT
+     234/    E163 :                     
+     235/    E163 :                     	;; Print ASCII area
+     236/    E163 : CE 00 C0            	LDX	#INBUF
+     237/    E166 : C6 10               	LDAB	#16
+     238/    E168 :                     DPL1:
+     239/    E168 : A6 00               	LDAA	,X
+     240/    E16A : 08                  	INX
+     241/    E16B : 81 20               	CMPA	#' '
+     242/    E16D : 25 09               	BCS	DPL2
+     243/    E16F : 81 7F               	CMPA	#$7F
+     244/    E171 : 24 05               	BCC	DPL2
+     245/    E173 : BD E7 71            	JSR	CONOUT
+     246/    E176 : 20 05               	BRA	DPL3
+     247/    E178 :                     DPL2:
+     248/    E178 : 86 2E               	LDAA	#'.'
+     249/    E17A : BD E7 71            	JSR	CONOUT
+     250/    E17D :                     DPL3:
+     251/    E17D : 5A                  	DECB
+     252/    E17E : 26 E8               	BNE	DPL1
+     253/    E180 : 7E E5 98            	JMP	CRLF
+     254/    E183 :                     
+     255/    E183 :                     	;; Dump byte
+     256/    E183 :                     DPB:
+     257/    E183 : 86 20               	LDAA	#' '
+     258/    E185 : BD E7 71            	JSR	CONOUT
+     259/    E188 : 96 D4               	LDAA	DSTATE
+     260/    E18A : 26 25               	BNE	DPB2
+     261/    E18C :                     	;; Dump state 0
+     262/    E18C : 96 D0               	LDAA	DSADDR
+     263/    E18E : 91 E7               	CMPA	DMPPT
+     264/    E190 : 26 06               	BNE	DPB0
+     265/    E192 : 96 D1               	LDAA	DSADDR+1
+     266/    E194 : 91 E8               	CMPA	DMPPT+1
+     267/    E196 : 27 15               	BEQ	DPB1
+     268/    E198 :                     	;; Still 0 or 2
+     269/    E198 :                     DPB0:
+     270/    E198 : 86 20               	LDAA	#' '
+     271/    E19A : BD E7 71            	JSR	CONOUT
+     272/    E19D : BD E7 71            	JSR	CONOUT
+     273/    E1A0 : DE E9               	LDX	ASCPT
+     274/    E1A2 : A7 00               	STAA	,X
+     275/    E1A4 : 08                  	INX
+     276/    E1A5 : DF E9               	STX	ASCPT
+     277/    E1A7 : DE E7               	LDX	DMPPT
+     278/    E1A9 : 08                  	INX
+     279/    E1AA : DF E7               	STX	DMPPT
+     280/    E1AC : 39                  	RTS
+     281/    E1AD :                     	;; Found start address
+     282/    E1AD :                     DPB1:
+     283/    E1AD : 86 01               	LDAA	#1
+     284/    E1AF : 97 D4               	STAA	DSTATE
+     285/    E1B1 :                     DPB2:
+     286/    E1B1 : 96 D4               	LDAA	DSTATE
+     287/    E1B3 : 81 01               	CMPA	#1
+     288/    E1B5 : 26 E1               	BNE	DPB0
+     289/    E1B7 :                     	;; Dump state 1
+     290/    E1B7 : DE E7               	LDX	DMPPT
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 7 - 01/05/23 16:58:03
+
+
+     291/    E1B9 : A6 00               	LDAA	,X
+     292/    E1BB : 08                  	INX
+     293/    E1BC : DF E7               	STX	DMPPT
+     294/    E1BE : DE E9               	LDX	ASCPT
+     295/    E1C0 : A7 00               	STAA	,X
+     296/    E1C2 : 08                  	INX
+     297/    E1C3 : DF E9               	STX	ASCPT
+     298/    E1C5 : BD E5 5D            	JSR	HEXOUT2
+     299/    E1C8 : 96 D2               	LDAA	DEADDR
+     300/    E1CA : 91 E7               	CMPA	DMPPT
+     301/    E1CC : 26 0A               	BNE	DPBE
+     302/    E1CE : 96 D3               	LDAA	DEADDR+1
+     303/    E1D0 : 91 E8               	CMPA	DMPPT+1
+     304/    E1D2 : 26 04               	BNE	DPBE
+     305/    E1D4 : 86 02               	LDAA	#2
+     306/    E1D6 : 97 D4               	STAA	DSTATE
+     307/    E1D8 :                     DPBE:
+     308/    E1D8 : 39                  	RTS
+     309/    E1D9 :                     
+     310/    E1D9 :                     ;;;
+     311/    E1D9 :                     ;;; Go address
+     312/    E1D9 :                     ;;;
+     313/    E1D9 :                     GO:
+     314/    E1D9 : 08                  	INX
+     315/    E1DA : BD E5 E9            	JSR	SKIPSP
+     316/    E1DD : BD E5 FE            	JSR	RDHEX
+     317/    E1E0 : A6 00               	LDAA	,X
+     318/    E1E2 : 27 03               	BEQ	GO0
+     319/    E1E4 : 7E E0 B2            	JMP	ERR
+     320/    E1E7 :                     GO0:	
+     321/    E1E7 : 5D                  	TSTB
+     322/    E1E8 : 27 04               	BEQ	G0
+     323/    E1EA : DE E5               	LDX	RHVAL
+     324/    E1EC : =>TRUE               	IF USE_REGCMD
+     325/    E1EC : DF E2               	STX	REGPC
+     326/    E1EE :                     G0:
+     327/    E1EE : 96 E0               	LDAA	REGSP
+     328/    E1F0 : 9A E1               	ORAA	REGSP+1
+     329/    E1F2 : 27 02               	BEQ	GO1
+     330/    E1F4 : 9E E0               	LDS	REGSP
+     331/    E1F6 :                     GO1:
+     332/    E1F6 : 96 E3               	LDAA	REGPC+1
+     333/    E1F8 : 36                  	PSHA			; PC(L)
+     334/    E1F9 : 96 E2               	LDAA	REGPC
+     335/    E1FB : 36                  	PSHA			; PC(H)
+     336/    E1FC : 96 DF               	LDAA	REGX+1
+     337/    E1FE : 36                  	PSHA			; X(L)
+     338/    E1FF : 96 DE               	LDAA	REGX
+     339/    E201 : 36                  	PSHA			; X(H)
+     340/    E202 : 96 DC               	LDAA	REGA
+     341/    E204 : 36                  	PSHA			; A
+     342/    E205 : 96 DD               	LDAA	REGB
+     343/    E207 : 36                  	PSHA			; B
+     344/    E208 : 96 E4               	LDAA	REGCC
+     345/    E20A : 36                  	PSHA			; CC
+     346/    E20B : 3B                  	RTI
+     347/    E20C : =>FALSE              	ELSE
+     348/    E20C :                     	STX	GADDR
+     349/    E20C :                     G0:
+     350/    E20C :                     	LDX	GADDR
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 8 - 01/05/23 16:58:03
+
+
+     351/    E20C :                     	JMP	,X
+     352/    E20C : [324]                	ENDIF
+     353/    E20C :                     
+     354/    E20C :                     ;;;
+     355/    E20C :                     ;;; Set memory
+     356/    E20C :                     ;;;
+     357/    E20C :                     SETM:
+     358/    E20C : 08                  	INX
+     359/    E20D : BD E5 E9            	JSR	SKIPSP
+     360/    E210 : BD E5 FE            	JSR	RDHEX
+     361/    E213 : BD E5 E9            	JSR	SKIPSP
+     362/    E216 : 6D 00               	TST	,X
+     363/    E218 : 26 57               	BNE	SMER
+     364/    E21A : 5D                  	TSTB
+     365/    E21B : 27 04               	BEQ	SM1
+     366/    E21D : DE E5               	LDX	RHVAL
+     367/    E21F : DF D7               	STX	SADDR
+     368/    E221 :                     SM1:
+     369/    E221 : 96 D7               	LDAA	SADDR
+     370/    E223 : D6 D8               	LDAB	SADDR+1
+     371/    E225 : BD E5 5A            	JSR	HEXOUT4
+     372/    E228 : CE E6 AD            	LDX	#DSEP1
+     373/    E22B : BD E5 4F            	JSR	STROUT
+     374/    E22E : DE D7               	LDX	SADDR
+     375/    E230 : A6 00               	LDAA	,X
+     376/    E232 : BD E5 5D            	JSR	HEXOUT2
+     377/    E235 : 86 20               	LDAA	#' '
+     378/    E237 : BD E7 71            	JSR	CONOUT
+     379/    E23A : BD E5 A2            	JSR	GETLIN
+     380/    E23D : CE 00 C0            	LDX	#INBUF
+     381/    E240 : BD E5 E9            	JSR	SKIPSP
+     382/    E243 : A6 00               	LDAA	,X
+     383/    E245 : 26 07               	BNE	SM2
+     384/    E247 :                     	;; Empty (Increment address)
+     385/    E247 : DE D7               	LDX	SADDR
+     386/    E249 : 08                  	INX
+     387/    E24A : DF D7               	STX	SADDR
+     388/    E24C : 20 D3               	BRA	SM1
+     389/    E24E :                     SM2:
+     390/    E24E : 81 2D               	CMPA	#'-'
+     391/    E250 : 26 07               	BNE	SM3
+     392/    E252 :                     	;; '-' (Decrement address)
+     393/    E252 : DE D7               	LDX	SADDR
+     394/    E254 : 09                  	DEX
+     395/    E255 : DF D7               	STX	SADDR
+     396/    E257 : 20 C8               	BRA	SM1
+     397/    E259 :                     SM3:
+     398/    E259 : 81 2E               	CMPA	#'.'
+     399/    E25B : 26 03               	BNE	SM4
+     400/    E25D :                     	;; '.' (Quit)
+     401/    E25D : 7E E0 73            	JMP	WSTART
+     402/    E260 :                     SM4:	
+     403/    E260 : BD E5 FE            	JSR	RDHEX
+     404/    E263 : 5D                  	TSTB
+     405/    E264 : 27 0B               	BEQ	SMER
+     406/    E266 : DE D7               	LDX	SADDR
+     407/    E268 : 96 E6               	LDAA	RHVAL+1
+     408/    E26A : A7 00               	STAA	,X
+     409/    E26C : 08                  	INX
+     410/    E26D : DF D7               	STX	SADDR
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 9 - 01/05/23 16:58:03
+
+
+     411/    E26F : 20 B0               	BRA	SM1
+     412/    E271 :                     SMER:
+     413/    E271 : 7E E0 B2            	JMP	ERR
+     414/    E274 :                     
+     415/    E274 :                     ;;;
+     416/    E274 :                     ;;; LOAD HEX file
+     417/    E274 :                     ;;;
+     418/    E274 :                     LOADH:
+     419/    E274 : 08                  	INX
+     420/    E275 : BD E5 E9            	JSR	SKIPSP
+     421/    E278 : BD E5 FE            	JSR	RDHEX
+     422/    E27B : BD E5 E9            	JSR	SKIPSP
+     423/    E27E : 6D 00               	TST	,X
+     424/    E280 : 26 EF               	BNE	SMER
+     425/    E282 :                     	
+     426/    E282 :                     	;;TSTB
+     427/    E282 :                     	;;BNE	LH0
+     428/    E282 :                     
+     429/    E282 :                     	;;CLR	RHVAL
+     430/    E282 :                     	;;CLR	RHVAL+1
+     431/    E282 :                     LH0:	
+     432/    E282 : BD E7 60            	JSR	CONIN
+     433/    E285 : BD E5 F3            	JSR	UPPER
+     434/    E288 : 81 53               	CMPA	#'S'
+     435/    E28A : 27 6F               	BEQ	LHS0
+     436/    E28C :                     LH1:
+     437/    E28C : 81 3A               	CMPA	#':'
+     438/    E28E : 27 0D               	BEQ	LHI0
+     439/    E290 :                     LH2:
+     440/    E290 :                     	;; Skip to EOL
+     441/    E290 : 81 0D               	CMPA	#CR
+     442/    E292 : 27 EE               	BEQ	LH0
+     443/    E294 : 81 0A               	CMPA	#LF
+     444/    E296 : 27 EA               	BEQ	LH0
+     445/    E298 :                     LH3:
+     446/    E298 : BD E7 60            	JSR	CONIN
+     447/    E29B : 20 F3               	BRA	LH2
+     448/    E29D :                     
+     449/    E29D :                     LHI0:
+     450/    E29D : BD E5 72            	JSR	HEXIN
+     451/    E2A0 : 97 EB               	STAA	CKSUM
+     452/    E2A2 : 16                  	TAB			; Length
+     453/    E2A3 :                     
+     454/    E2A3 : BD E5 72            	JSR	HEXIN
+     455/    E2A6 : 97 E7               	STAA	DMPPT		; Address H
+     456/    E2A8 : 9B EB               	ADDA	CKSUM
+     457/    E2AA : 97 EB               	STAA	CKSUM
+     458/    E2AC :                     
+     459/    E2AC : BD E5 72            	JSR	HEXIN
+     460/    E2AF : 97 E8               	STAA	DMPPT+1		; Address L
+     461/    E2B1 : 9B EB               	ADDA	CKSUM
+     462/    E2B3 : 97 EB               	STAA	CKSUM
+     463/    E2B5 :                     
+     464/    E2B5 :                     	;; Add offset
+     465/    E2B5 : 96 E8               	LDAA	DMPPT+1
+     466/    E2B7 : 9B E6               	ADDA	RHVAL+1
+     467/    E2B9 : 97 E8               	STAA	DMPPT+1
+     468/    E2BB : 96 E7               	LDAA	DMPPT
+     469/    E2BD : 99 E5               	ADCA	RHVAL
+     470/    E2BF : 97 E7               	STAA	DMPPT
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 10 - 01/05/23 16:58:03
+
+
+     471/    E2C1 : DE E7               	LDX	DMPPT
+     472/    E2C3 :                     
+     473/    E2C3 : BD E5 72            	JSR	HEXIN
+     474/    E2C6 : 97 DA               	STAA	RECTYP
+     475/    E2C8 : 9B EB               	ADDA	CKSUM
+     476/    E2CA : 97 EB               	STAA	CKSUM
+     477/    E2CC :                     
+     478/    E2CC : 5D                  	TSTB
+     479/    E2CD : 27 14               	BEQ	LHI3
+     480/    E2CF :                     LHI1:
+     481/    E2CF : BD E5 72            	JSR	HEXIN
+     482/    E2D2 : 36                  	PSHA
+     483/    E2D3 : 9B EB               	ADDA	CKSUM
+     484/    E2D5 : 97 EB               	STAA	CKSUM
+     485/    E2D7 : 32                  	PULA
+     486/    E2D8 :                     
+     487/    E2D8 : 7D 00 DA            	TST	RECTYP
+     488/    E2DB : 26 03               	BNE	LHI2
+     489/    E2DD :                     
+     490/    E2DD : A7 00               	STAA	,X
+     491/    E2DF : 08                  	INX
+     492/    E2E0 :                     LHI2:
+     493/    E2E0 : 5A                  	DECB
+     494/    E2E1 : 26 EC               	BNE	LHI1
+     495/    E2E3 :                     LHI3:
+     496/    E2E3 : BD E5 72            	JSR	HEXIN
+     497/    E2E6 : 9B EB               	ADDA	CKSUM
+     498/    E2E8 : 26 08               	BNE	LHIE		; Checksum error
+     499/    E2EA : 7D 00 DA            	TST	RECTYP
+     500/    E2ED : 27 A9               	BEQ	LH3
+     501/    E2EF : 7E E0 73            	JMP	WSTART
+     502/    E2F2 :                     LHIE:
+     503/    E2F2 : CE E6 88            	LDX	#IHEMSG
+     504/    E2F5 : BD E5 4F            	JSR	STROUT
+     505/    E2F8 : 7E E0 73            	JMP	WSTART
+     506/    E2FB :                     	
+     507/    E2FB :                     LHS0:
+     508/    E2FB : BD E7 60            	JSR	CONIN
+     509/    E2FE : 97 DA               	STAA	RECTYP		; Record type
+     510/    E300 :                     
+     511/    E300 : BD E5 72            	JSR	HEXIN
+     512/    E303 : 16                  	TAB			; B = Length+3
+     513/    E304 : 97 EB               	STAA	CKSUM
+     514/    E306 :                     
+     515/    E306 : BD E5 72            	JSR	HEXIN
+     516/    E309 : 97 E7               	STAA	DMPPT		; Address H
+     517/    E30B : 9B EB               	ADDA	CKSUM
+     518/    E30D : 97 EB               	STAA	CKSUM
+     519/    E30F :                     
+     520/    E30F : BD E5 72            	JSR	HEXIN
+     521/    E312 : 97 E8               	STAA	DMPPT+1		; Address L
+     522/    E314 : 9B EB               	ADDA	CKSUM
+     523/    E316 : 97 EB               	STAA	CKSUM
+     524/    E318 :                     
+     525/    E318 :                     	;; Add offset
+     526/    E318 : 96 E8               	LDAA	DMPPT+1
+     527/    E31A : 9B E6               	ADDA	RHVAL+1
+     528/    E31C : 97 E8               	STAA	DMPPT+1
+     529/    E31E : 96 E7               	LDAA	DMPPT
+     530/    E320 : 99 E5               	ADCA	RHVAL
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 11 - 01/05/23 16:58:03
+
+
+     531/    E322 : 97 E7               	STAA	DMPPT
+     532/    E324 : DE E7               	LDX	DMPPT
+     533/    E326 :                     
+     534/    E326 : C0 03               	SUBB	#3
+     535/    E328 : 27 18               	BEQ	LHS3
+     536/    E32A :                     LHS1:	
+     537/    E32A : BD E5 72            	JSR	HEXIN
+     538/    E32D : 36                  	PSHA
+     539/    E32E : 9B EB               	ADDA	CKSUM
+     540/    E330 : 97 EB               	STAA	CKSUM		; Checksum
+     541/    E332 :                     
+     542/    E332 : 96 DA               	LDAA	RECTYP
+     543/    E334 : 81 31               	CMPA	#'1'
+     544/    E336 : 26 06               	BNE	LHS2
+     545/    E338 :                     
+     546/    E338 : 32                  	PULA
+     547/    E339 : A7 00               	STAA	,X
+     548/    E33B : 08                  	INX
+     549/    E33C : 20 01               	BRA	LHS20
+     550/    E33E :                     LHS2:
+     551/    E33E : 32                  	PULA
+     552/    E33F :                     LHS20:
+     553/    E33F : 5A                  	DECB
+     554/    E340 : 26 E8               	BNE	LHS1
+     555/    E342 :                     LHS3:
+     556/    E342 : BD E5 72            	JSR	HEXIN
+     557/    E345 : 9B EB               	ADDA	CKSUM
+     558/    E347 : 81 FF               	CMPA	#$FF
+     559/    E349 : 26 11               	BNE	LHSE		; Checksum error
+     560/    E34B :                     
+     561/    E34B : 96 DA               	LDAA	RECTYP
+     562/    E34D : 81 37               	CMPA	#'7'
+     563/    E34F : 27 11               	BEQ	LHSR
+     564/    E351 : 81 38               	CMPA	#'8'
+     565/    E353 : 27 0D               	BEQ	LHSR
+     566/    E355 : 81 39               	CMPA	#'9'
+     567/    E357 : 27 09               	BEQ	LHSR
+     568/    E359 : 7E E2 98            	JMP	LH3
+     569/    E35C :                     LHSE:
+     570/    E35C : CE E6 95            	LDX	#SHEMSG
+     571/    E35F : BD E5 4F            	JSR	STROUT
+     572/    E362 :                     LHSR:
+     573/    E362 : 7E E0 73            	JMP	WSTART
+     574/    E365 :                     
+     575/    E365 :                     ;;;
+     576/    E365 :                     ;;; SAVE HEX file
+     577/    E365 :                     ;;;
+     578/    E365 :                     SAVEH:
+     579/    E365 : 08                  	INX
+     580/    E366 : A6 00               	LDAA	,X
+     581/    E368 : BD E5 F3            	JSR	UPPER
+     582/    E36B : 81 49               	CMPA	#'I'
+     583/    E36D : 27 04               	BEQ	SH0
+     584/    E36F : 81 53               	CMPA	#'S'
+     585/    E371 : 26 03               	BNE	SH1
+     586/    E373 :                     SH0:
+     587/    E373 : 08                  	INX
+     588/    E374 : 97 D9               	STAA	HEXMOD
+     589/    E376 :                     SH1:
+     590/    E376 : BD E5 E9            	JSR	SKIPSP
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 12 - 01/05/23 16:58:03
+
+
+     591/    E379 : BD E5 FE            	JSR	RDHEX
+     592/    E37C : 5D                  	TSTB
+     593/    E37D : 27 22               	BEQ	SHE
+     594/    E37F : 96 E5               	LDAA	RHVAL
+     595/    E381 : 97 E9               	STAA	ASCPT
+     596/    E383 : 96 E6               	LDAA	RHVAL+1
+     597/    E385 : 97 EA               	STAA	ASCPT+1		; (ASCPT) = Start address
+     598/    E387 : BD E5 E9            	JSR	SKIPSP
+     599/    E38A : A6 00               	LDAA	,X
+     600/    E38C : 81 2C               	CMPA	#','
+     601/    E38E : 26 11               	BNE	SHE
+     602/    E390 : 08                  	INX
+     603/    E391 : BD E5 E9            	JSR	SKIPSP
+     604/    E394 : BD E5 FE            	JSR	RDHEX		; (RHVAL) = End address
+     605/    E397 : 5D                  	TSTB
+     606/    E398 : 27 07               	BEQ	SHE
+     607/    E39A : BD E5 E9            	JSR	SKIPSP
+     608/    E39D : 6D 00               	TST	,X
+     609/    E39F : 27 03               	BEQ	SH2
+     610/    E3A1 :                     SHE:
+     611/    E3A1 : 7E E0 B2            	JMP	ERR
+     612/    E3A4 :                     
+     613/    E3A4 :                     SH2:
+     614/    E3A4 : DE E5               	LDX	RHVAL
+     615/    E3A6 : 08                  	INX
+     616/    E3A7 : DF E5               	STX	RHVAL
+     617/    E3A9 : 96 E6               	LDAA	RHVAL+1
+     618/    E3AB : 90 EA               	SUBA	ASCPT+1
+     619/    E3AD : 97 E6               	STAA	RHVAL+1
+     620/    E3AF : 96 E5               	LDAA	RHVAL
+     621/    E3B1 : 92 E9               	SBCA	ASCPT
+     622/    E3B3 : 97 E5               	STAA	RHVAL		; (RHVAL) = Length
+     623/    E3B5 : DE E9               	LDX	ASCPT		; IX = Start address
+     624/    E3B7 :                     SH3:
+     625/    E3B7 : 8D 1E               	BSR	SHL
+     626/    E3B9 : 96 E5               	LDAA	RHVAL
+     627/    E3BB : 9A E6               	ORAA	RHVAL+1
+     628/    E3BD : 26 F8               	BNE	SH3
+     629/    E3BF :                     
+     630/    E3BF : 96 D9               	LDAA	HEXMOD
+     631/    E3C1 : 81 49               	CMPA	#'I'
+     632/    E3C3 : 26 09               	BNE	SH4
+     633/    E3C5 :                     	;; End record for Intel HEX
+     634/    E3C5 : CE E6 B1            	LDX	#IHEXER
+     635/    E3C8 : BD E5 4F            	JSR	STROUT
+     636/    E3CB : 7E E0 73            	JMP	WSTART
+     637/    E3CE :                     SH4:
+     638/    E3CE :                     	;; End record for Motorola S record
+     639/    E3CE : CE E6 BF            	LDX	#SRECER
+     640/    E3D1 : BD E5 4F            	JSR	STROUT
+     641/    E3D4 : 7E E0 73            	JMP	WSTART
+     642/    E3D7 :                     
+     643/    E3D7 :                     SHL:
+     644/    E3D7 : C6 10               	LDAB	#16
+     645/    E3D9 : 7D 00 E5            	TST	RHVAL
+     646/    E3DC : 26 06               	BNE	SHL0
+     647/    E3DE : 96 E6               	LDAA	RHVAL+1		; Length L
+     648/    E3E0 : 11                  	CBA			; (A - B)
+     649/    E3E1 : 24 01               	BCC	SHL0
+     650/    E3E3 : 16                  	TAB			; B = A
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 13 - 01/05/23 16:58:03
+
+
+     651/    E3E4 :                     SHL0:
+     652/    E3E4 : 96 E6               	LDAA	RHVAL+1
+     653/    E3E6 : 10                  	SBA
+     654/    E3E7 : 97 E6               	STAA	RHVAL+1
+     655/    E3E9 : 96 E5               	LDAA	RHVAL
+     656/    E3EB : 82 00               	SBCA	#0
+     657/    E3ED : 97 E5               	STAA	RHVAL
+     658/    E3EF :                     
+     659/    E3EF : 96 D9               	LDAA	HEXMOD
+     660/    E3F1 : 81 49               	CMPA	#'I'
+     661/    E3F3 : 26 3F               	BNE	SHLS
+     662/    E3F5 :                     
+     663/    E3F5 :                     SHLI:	
+     664/    E3F5 :                     	;; Intel HEX
+     665/    E3F5 : 86 3A               	LDAA	#':'
+     666/    E3F7 : BD E7 71            	JSR	CONOUT
+     667/    E3FA :                     
+     668/    E3FA : 17                  	TBA
+     669/    E3FB : BD E5 5D            	JSR	HEXOUT2		; Length
+     670/    E3FE : D7 EB               	STAB	CKSUM		; Checksum
+     671/    E400 :                     
+     672/    E400 : DF E9               	STX	ASCPT
+     673/    E402 : 96 E9               	LDAA	ASCPT		; Address H
+     674/    E404 : BD E5 5D            	JSR	HEXOUT2
+     675/    E407 : 96 E9               	LDAA	ASCPT
+     676/    E409 : 9B EB               	ADDA	CKSUM
+     677/    E40B : 97 EB               	STAA	CKSUM
+     678/    E40D :                     
+     679/    E40D : 96 EA               	LDAA	ASCPT+1		; Address L
+     680/    E40F : BD E5 5D            	JSR	HEXOUT2
+     681/    E412 : 96 EA               	LDAA	ASCPT+1
+     682/    E414 : 9B EB               	ADDA	CKSUM
+     683/    E416 : 97 EB               	STAA	CKSUM
+     684/    E418 :                     
+     685/    E418 : 4F                  	CLRA
+     686/    E419 : BD E5 5D            	JSR	HEXOUT2		; Record type
+     687/    E41C :                     SHLI0:
+     688/    E41C : A6 00               	LDAA	,X
+     689/    E41E : 36                  	PSHA
+     690/    E41F : BD E5 5D            	JSR	HEXOUT2		; Data
+     691/    E422 : 32                  	PULA
+     692/    E423 : 9B EB               	ADDA	CKSUM
+     693/    E425 : 97 EB               	STAA	CKSUM
+     694/    E427 :                     
+     695/    E427 : 08                  	INX
+     696/    E428 : 5A                  	DECB
+     697/    E429 : 26 F1               	BNE	SHLI0
+     698/    E42B :                     
+     699/    E42B : 96 EB               	LDAA	CKSUM
+     700/    E42D : 40                  	NEGA
+     701/    E42E : BD E5 5D            	JSR	HEXOUT2
+     702/    E431 : 7E E5 98            	JMP	CRLF
+     703/    E434 :                     
+     704/    E434 :                     SHLS:
+     705/    E434 :                     	;; Motorola S record
+     706/    E434 : 86 53               	LDAA	#'S'
+     707/    E436 : BD E7 71            	JSR	CONOUT
+     708/    E439 : 86 31               	LDAA	#'1'
+     709/    E43B : BD E7 71            	JSR	CONOUT
+     710/    E43E :                     
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 14 - 01/05/23 16:58:03
+
+
+     711/    E43E : 17                  	TBA
+     712/    E43F : 8B 03               	ADDA	#2+1		; DataLength + Addr(2) + Sum(1)
+     713/    E441 : 97 EB               	STAA	CKSUM
+     714/    E443 : BD E5 5D            	JSR	HEXOUT2
+     715/    E446 :                     	
+     716/    E446 : DF E9               	STX	ASCPT
+     717/    E448 : 96 E9               	LDAA	ASCPT
+     718/    E44A : BD E5 5D            	JSR	HEXOUT2		; Address H
+     719/    E44D : 96 E9               	LDAA	ASCPT
+     720/    E44F : 9B EB               	ADDA	CKSUM
+     721/    E451 : 97 EB               	STAA	CKSUM
+     722/    E453 :                     	
+     723/    E453 : 96 EA               	LDAA	ASCPT+1
+     724/    E455 : BD E5 5D            	JSR	HEXOUT2		; Address L
+     725/    E458 : 96 EA               	LDAA	ASCPT+1
+     726/    E45A : 9B EB               	ADDA	CKSUM
+     727/    E45C : 97 EB               	STAA	CKSUM
+     728/    E45E :                     SHLS0:
+     729/    E45E : A6 00               	LDAA	,X
+     730/    E460 : 36                  	PSHA
+     731/    E461 : BD E5 5D            	JSR	HEXOUT2		; Data
+     732/    E464 : 32                  	PULA
+     733/    E465 : 9B EB               	ADDA	CKSUM
+     734/    E467 : 97 EB               	STAA	CKSUM
+     735/    E469 :                     
+     736/    E469 : 08                  	INX
+     737/    E46A : 5A                  	DECB
+     738/    E46B : 26 F1               	BNE	SHLS0
+     739/    E46D :                     
+     740/    E46D : 96 EB               	LDAA	CKSUM
+     741/    E46F : 43                  	COMA
+     742/    E470 : BD E5 5D            	JSR	HEXOUT2		; Checksum
+     743/    E473 : 7E E5 98            	JMP	CRLF
+     744/    E476 :                     
+     745/    E476 :                     ;;;
+     746/    E476 :                     ;;; Register
+     747/    E476 :                     ;;;
+     748/    E476 : =>TRUE               	IF USE_REGCMD
+     749/    E476 :                     REG:
+     750/    E476 : 08                  	INX
+     751/    E477 : BD E5 E9            	JSR	SKIPSP
+     752/    E47A : BD E5 F3            	JSR	UPPER
+     753/    E47D : 4D                  	TSTA
+     754/    E47E : 26 06               	BNE	RG0
+     755/    E480 : BD E5 04            	JSR	RDUMP
+     756/    E483 : 7E E0 73            	JMP	WSTART
+     757/    E486 :                     RG0:
+     758/    E486 : DF E7               	STX	DMPPT
+     759/    E488 : CE E7 1B            	LDX	#RNTAB
+     760/    E48B :                     RG1:
+     761/    E48B : 6D 00               	TST	,X
+     762/    E48D : 27 72               	BEQ	RGE
+     763/    E48F : A1 00               	CMPA	,X
+     764/    E491 : 27 08               	BEQ	RG2
+     765/    E493 : 08                  	INX
+     766/    E494 : 08                  	INX
+     767/    E495 : 08                  	INX
+     768/    E496 : 08                  	INX
+     769/    E497 : 08                  	INX
+     770/    E498 : 08                  	INX
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 15 - 01/05/23 16:58:03
+
+
+     771/    E499 : 20 F0               	BRA	RG1
+     772/    E49B :                     RG2:
+     773/    E49B : DF E9               	STX	ASCPT
+     774/    E49D : DE E7               	LDX	DMPPT
+     775/    E49F : 08                  	INX
+     776/    E4A0 : BD E5 E9            	JSR	SKIPSP
+     777/    E4A3 : 6D 00               	TST	,X
+     778/    E4A5 : 26 5A               	BNE	RGE
+     779/    E4A7 : DE E9               	LDX	ASCPT
+     780/    E4A9 : EE 04               	LDX	4,X
+     781/    E4AB : BD E5 4F            	JSR	STROUT
+     782/    E4AE : 86 3D               	LDAA	#'='
+     783/    E4B0 : BD E7 71            	JSR	CONOUT
+     784/    E4B3 : DE E9               	LDX	ASCPT
+     785/    E4B5 : E6 01               	LDAB	1,X
+     786/    E4B7 : EE 02               	LDX	2,X
+     787/    E4B9 : C1 01               	CMPB	#1
+     788/    E4BB : 26 07               	BNE	RG3
+     789/    E4BD :                     	;; 8 bit register
+     790/    E4BD : A6 00               	LDAA	,X
+     791/    E4BF : BD E5 5D            	JSR	HEXOUT2
+     792/    E4C2 : 20 0A               	BRA	RG4
+     793/    E4C4 :                     RG3:
+     794/    E4C4 :                     	;; 16 bit register
+     795/    E4C4 : A6 00               	LDAA	,X
+     796/    E4C6 : BD E5 5D            	JSR	HEXOUT2
+     797/    E4C9 : A6 01               	LDAA	1,X
+     798/    E4CB : BD E5 5D            	JSR	HEXOUT2
+     799/    E4CE :                     RG4:
+     800/    E4CE : 86 20               	LDAA	#' '
+     801/    E4D0 : BD E7 71            	JSR	CONOUT
+     802/    E4D3 : BD E5 A2            	JSR	GETLIN
+     803/    E4D6 : CE 00 C0            	LDX	#INBUF
+     804/    E4D9 : BD E5 E9            	JSR	SKIPSP
+     805/    E4DC : A6 00               	LDAA	,X
+     806/    E4DE : 27 1E               	BEQ	RGR
+     807/    E4E0 : BD E5 FE            	JSR	RDHEX
+     808/    E4E3 : 5D                  	TSTB
+     809/    E4E4 : 27 1B               	BEQ	RGE
+     810/    E4E6 : DE E9               	LDX	ASCPT
+     811/    E4E8 : E6 01               	LDAB	1,X
+     812/    E4EA : EE 02               	LDX	2,X
+     813/    E4EC : C1 01               	CMPB	#1
+     814/    E4EE : 26 06               	BNE	RG5
+     815/    E4F0 :                     	;; 8 bit register
+     816/    E4F0 : 96 E6               	LDAA	RHVAL+1
+     817/    E4F2 : A7 00               	STAA	,X
+     818/    E4F4 : 20 08               	BRA	RG6
+     819/    E4F6 :                     RG5:
+     820/    E4F6 :                     	;; 16 bit register
+     821/    E4F6 : 96 E5               	LDAA	RHVAL
+     822/    E4F8 : A7 00               	STAA	,X
+     823/    E4FA : 96 E6               	LDAA	RHVAL+1
+     824/    E4FC : A7 01               	STAA	1,X
+     825/    E4FE :                     RG6:	
+     826/    E4FE :                     RGR:	
+     827/    E4FE : 7E E0 73            	JMP	WSTART
+     828/    E501 :                     RGE:
+     829/    E501 : 7E E0 B2            	JMP	ERR
+     830/    E504 :                     	
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 16 - 01/05/23 16:58:03
+
+
+     831/    E504 :                     RDUMP:
+     832/    E504 : CE E7 00            	LDX	#RDSA
+     833/    E507 : BD E5 4F            	JSR	STROUT
+     834/    E50A : 96 DC               	LDAA	REGA
+     835/    E50C : BD E5 5D            	JSR	HEXOUT2
+     836/    E50F :                     
+     837/    E50F : CE E7 03            	LDX	#RDSB
+     838/    E512 : BD E5 4F            	JSR	STROUT
+     839/    E515 : 96 DD               	LDAA	REGB
+     840/    E517 : BD E5 5D            	JSR	HEXOUT2
+     841/    E51A :                     
+     842/    E51A : CE E7 07            	LDX	#RDSX
+     843/    E51D : BD E5 4F            	JSR	STROUT
+     844/    E520 : 96 DE               	LDAA	REGX
+     845/    E522 : D6 DF               	LDAB	REGX+1
+     846/    E524 : BD E5 5A            	JSR	HEXOUT4
+     847/    E527 :                     	
+     848/    E527 : CE E7 0B            	LDX	#RDSSP
+     849/    E52A : BD E5 4F            	JSR	STROUT
+     850/    E52D : 96 E0               	LDAA	REGSP
+     851/    E52F : D6 E1               	LDAB	REGSP+1
+     852/    E531 : BD E5 5A            	JSR	HEXOUT4
+     853/    E534 :                     	
+     854/    E534 : CE E7 10            	LDX	#RDSPC
+     855/    E537 : BD E5 4F            	JSR	STROUT
+     856/    E53A : 96 E2               	LDAA	REGPC
+     857/    E53C : D6 E3               	LDAB	REGPC+1
+     858/    E53E : BD E5 5A            	JSR	HEXOUT4
+     859/    E541 :                     	
+     860/    E541 : CE E7 15            	LDX	#RDSCC
+     861/    E544 : BD E5 4F            	JSR	STROUT
+     862/    E547 : 96 E4               	LDAA	REGCC
+     863/    E549 : BD E5 5D            	JSR	HEXOUT2
+     864/    E54C :                     
+     865/    E54C : 7E E5 98            	JMP	CRLF
+     866/    E54F : [748]                	ENDIF
+     867/    E54F :                     	
+     868/    E54F :                     ;;;
+     869/    E54F :                     ;;; Other support routines
+     870/    E54F :                     ;;;
+     871/    E54F :                     	
+     872/    E54F :                     STROUT:
+     873/    E54F : A6 00               	LDAA	0,X
+     874/    E551 : 27 06               	BEQ	STROE
+     875/    E553 : BD E7 71            	JSR	CONOUT
+     876/    E556 : 08                  	INX
+     877/    E557 : 20 F6               	BRA	STROUT
+     878/    E559 :                     STROE:
+     879/    E559 : 39                  	RTS
+     880/    E55A :                     
+     881/    E55A :                     HEXOUT4:
+     882/    E55A : 8D 01               	BSR	HEXOUT2
+     883/    E55C : 17                  	TBA
+     884/    E55D :                     HEXOUT2:
+     885/    E55D : 36                  	PSHA
+     886/    E55E : 44                  	LSRA
+     887/    E55F : 44                  	LSRA
+     888/    E560 : 44                  	LSRA
+     889/    E561 : 44                  	LSRA
+     890/    E562 : 8D 01               	BSR	HEXOUT1
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 17 - 01/05/23 16:58:03
+
+
+     891/    E564 : 32                  	PULA
+     892/    E565 :                     HEXOUT1:
+     893/    E565 : 84 0F               	ANDA	#$0F
+     894/    E567 : 8B 30               	ADDA	#'0'
+     895/    E569 : 81 3A               	CMPA	#'9'+1
+     896/    E56B : 25 02               	BCS	HEXOUTE
+     897/    E56D : 8B 07               	ADDA	#'A'-'9'-1
+     898/    E56F :                     HEXOUTE:	
+     899/    E56F : 7E E7 71            	JMP	CONOUT
+     900/    E572 :                     
+     901/    E572 :                     HEXIN:
+     902/    E572 : 4F                  	CLRA
+     903/    E573 : 8D 04               	BSR	HI0
+     904/    E575 : 48                  	ASLA
+     905/    E576 : 48                  	ASLA
+     906/    E577 : 48                  	ASLA
+     907/    E578 : 48                  	ASLA
+     908/    E579 :                     HI0:
+     909/    E579 : 37                  	PSHB
+     910/    E57A : 16                  	TAB
+     911/    E57B : BD E7 60            	JSR	CONIN
+     912/    E57E : BD E5 F3            	JSR	UPPER
+     913/    E581 : 81 30               	CMPA	#'0'
+     914/    E583 : 25 11               	BCS	HIR
+     915/    E585 : 81 3A               	CMPA	#'9'+1
+     916/    E587 : 25 0A               	BCS	HI1
+     917/    E589 : 81 41               	CMPA	#'A'
+     918/    E58B : 25 09               	BCS	HIR
+     919/    E58D : 81 47               	CMPA	#'F'+1
+     920/    E58F : 24 05               	BCC	HIR
+     921/    E591 : 80 07               	SUBA	#'A'-'9'-1
+     922/    E593 :                     HI1:
+     923/    E593 : 80 30               	SUBA	#'0'
+     924/    E595 : 1B                  	ABA
+     925/    E596 :                     HIR:
+     926/    E596 : 33                  	PULB
+     927/    E597 : 39                  	RTS
+     928/    E598 :                     	
+     929/    E598 :                     CRLF:
+     930/    E598 : 86 0D               	LDAA	#CR
+     931/    E59A : BD E7 71            	JSR	CONOUT
+     932/    E59D : 86 0A               	LDAA	#LF
+     933/    E59F : 7E E7 71            	JMP	CONOUT
+     934/    E5A2 :                     
+     935/    E5A2 :                     GETLIN:
+     936/    E5A2 : CE 00 C0            	LDX	#INBUF
+     937/    E5A5 : 5F                  	CLRB
+     938/    E5A6 :                     GL0:
+     939/    E5A6 : BD E7 60            	JSR	CONIN
+     940/    E5A9 : 81 0D               	CMPA	#CR
+     941/    E5AB : 27 37               	BEQ	GLE
+     942/    E5AD : 81 0A               	CMPA	#LF
+     943/    E5AF : 27 33               	BEQ	GLE
+     944/    E5B1 : 81 08               	CMPA	#BS
+     945/    E5B3 : 27 19               	BEQ	GLB
+     946/    E5B5 : 81 7F               	CMPA	#DEL
+     947/    E5B7 : 27 15               	BEQ	GLB
+     948/    E5B9 : 81 20               	CMPA	#' '
+     949/    E5BB : 25 E9               	BCS	GL0
+     950/    E5BD : 81 80               	CMPA	#$80
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 18 - 01/05/23 16:58:03
+
+
+     951/    E5BF : 24 E5               	BCC	GL0
+     952/    E5C1 : C1 0F               	CMPB	#BUFLEN-1
+     953/    E5C3 : 24 E1               	BCC	GL0		; Too long
+     954/    E5C5 : 5C                  	INCB
+     955/    E5C6 : A7 00               	STAA	0,X
+     956/    E5C8 : 08                  	INX
+     957/    E5C9 : BD E7 71            	JSR	CONOUT
+     958/    E5CC : 20 D8               	BRA	GL0
+     959/    E5CE :                     GLB:	
+     960/    E5CE : 5D                  	TSTB
+     961/    E5CF : 27 D5               	BEQ	GL0
+     962/    E5D1 : 5A                  	DECB
+     963/    E5D2 : 09                  	DEX
+     964/    E5D3 : 86 08               	LDAA	#BS
+     965/    E5D5 : BD E7 71            	JSR	CONOUT
+     966/    E5D8 : 86 20               	LDAA	#' '
+     967/    E5DA : BD E7 71            	JSR	CONOUT
+     968/    E5DD : 86 08               	LDAA	#BS
+     969/    E5DF : BD E7 71            	JSR	CONOUT
+     970/    E5E2 : 20 C2               	BRA	GL0
+     971/    E5E4 :                     GLE:
+     972/    E5E4 : 8D B2               	BSR	CRLF
+     973/    E5E6 : 6F 00               	CLR	0,X
+     974/    E5E8 : 39                  	RTS
+     975/    E5E9 :                     
+     976/    E5E9 :                     SKIPSP:
+     977/    E5E9 : A6 00               	LDAA	0,X
+     978/    E5EB : 81 20               	CMPA	#' '
+     979/    E5ED : 26 03               	BNE	SSE
+     980/    E5EF : 08                  	INX
+     981/    E5F0 : 20 F7               	BRA	SKIPSP
+     982/    E5F2 :                     SSE:
+     983/    E5F2 : 39                  	RTS
+     984/    E5F3 :                     
+     985/    E5F3 :                     UPPER:
+     986/    E5F3 : 81 61               	CMPA	#'a'
+     987/    E5F5 : 25 06               	BCS	UPE
+     988/    E5F7 : 81 7B               	CMPA	#'z'+1
+     989/    E5F9 : 24 02               	BCC	UPE
+     990/    E5FB : 8B E0               	ADDA	#'A'-'a'
+     991/    E5FD :                     UPE:
+     992/    E5FD : 39                  	RTS
+     993/    E5FE :                     
+     994/    E5FE :                     RDHEX:
+     995/    E5FE : 5F                  	CLRB
+     996/    E5FF : 7F 00 E5            	CLR	RHVAL
+     997/    E602 : 7F 00 E6            	CLR	RHVAL+1
+     998/    E605 :                     RH0:
+     999/    E605 : A6 00               	LDAA	,X
+    1000/    E607 : 8D EA               	BSR	UPPER
+    1001/    E609 : 81 30               	CMPA	#'0'
+    1002/    E60B : 25 34               	BCS	RHE
+    1003/    E60D : 81 3A               	CMPA	#'9'+1
+    1004/    E60F : 25 0A               	BCS	RH1
+    1005/    E611 : 81 41               	CMPA	#'A'
+    1006/    E613 : 25 2C               	BCS	RHE
+    1007/    E615 : 81 47               	CMPA	#'F'+1
+    1008/    E617 : 24 28               	BCC	RHE
+    1009/    E619 : 80 07               	SUBA	#'A'-'9'-1
+    1010/    E61B :                     RH1:
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 19 - 01/05/23 16:58:03
+
+
+    1011/    E61B : 80 30               	SUBA	#'0'
+    1012/    E61D : 49                  	ROLA
+    1013/    E61E : 49                  	ROLA
+    1014/    E61F : 49                  	ROLA
+    1015/    E620 : 49                  	ROLA
+    1016/    E621 : 49                  	ROLA
+    1017/    E622 : 79 00 E6            	ROL	RHVAL+1
+    1018/    E625 : 79 00 E5            	ROL	RHVAL
+    1019/    E628 : 49                  	ROLA
+    1020/    E629 : 79 00 E6            	ROL	RHVAL+1
+    1021/    E62C : 79 00 E5            	ROL	RHVAL
+    1022/    E62F : 49                  	ROLA
+    1023/    E630 : 79 00 E6            	ROL	RHVAL+1
+    1024/    E633 : 79 00 E5            	ROL	RHVAL
+    1025/    E636 : 49                  	ROLA
+    1026/    E637 : 79 00 E6            	ROL	RHVAL+1
+    1027/    E63A : 79 00 E5            	ROL	RHVAL
+    1028/    E63D : 08                  	INX
+    1029/    E63E : 5C                  	INCB
+    1030/    E63F : 20 C4               	BRA	RH0
+    1031/    E641 :                     RHE:
+    1032/    E641 : 39                  	RTS
+    1033/    E642 :                     
+    1034/    E642 :                     ;;;
+    1035/    E642 :                     ;;; Interrupt handler
+    1036/    E642 :                     ;;;
+    1037/    E642 :                     SWIH:
+    1038/    E642 : =>TRUE               	IF USE_REGCMD
+    1039/    E642 : CE E6 FA            	LDX	#SWIMSG
+    1040/    E645 : BD E5 4F            	JSR	STROUT
+    1041/    E648 :                     
+    1042/    E648 : 32                  	PULA			; CCR
+    1043/    E649 : 97 E4               	STAA	REGCC
+    1044/    E64B : 32                  	PULA			; B
+    1045/    E64C : 97 DD               	STAA	REGB
+    1046/    E64E : 32                  	PULA			; A
+    1047/    E64F : 97 DC               	STAA	REGA
+    1048/    E651 : 32                  	PULA			; X(H)
+    1049/    E652 : 97 DE               	STAA	REGX
+    1050/    E654 : 32                  	PULA			; X(L)
+    1051/    E655 : 97 DF               	STAA	REGX+1
+    1052/    E657 : 32                  	PULA			; PC(H)
+    1053/    E658 : 33                  	PULB			; PC(L)
+    1054/    E659 : C0 01               	SUBB	#1
+    1055/    E65B : D7 E3               	STAB	REGPC+1
+    1056/    E65D : 82 00               	SBCA	#0
+    1057/    E65F : 97 E2               	STAA	REGPC
+    1058/    E661 : 9F E0               	STS	REGSP
+    1059/    E663 : BD E5 04            	JSR	RDUMP
+    1060/    E666 : 7E E0 73            	JMP	WSTART
+    1061/    E669 : =>FALSE              	ELSE
+    1062/    E669 :                     	;; Dummy
+    1063/    E669 :                     	RTI
+    1064/    E669 : [1038]               	ENDIF
+    1065/    E669 :                     
+    1066/    E669 :                     DUMMYH:
+    1067/    E669 : 3B                  	RTI
+    1068/    E66A :                     	
+    1069/    E66A :                     ;;;
+    1070/    E66A :                     ;;; Strings
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 20 - 01/05/23 16:58:03
+
+
+    1071/    E66A :                     ;;;
+    1072/    E66A :                     	
+    1073/    E66A :                     OPNMSG:
+    1074/    E66A : 0D 0A 55 6E 69 76   	DC	CR,LF,"Universal Monitor 6800",CR,LF,$00
+             E670 : 65 72 73 61 6C 20 
+             E676 : 4D 6F 6E 69 74 6F 
+             E67C : 72 20 36 38 30 30 
+             E682 : 0D 0A 00          
+    1075/    E685 :                     
+    1076/    E685 :                     PROMPT:
+    1077/    E685 : 5D 20 00            	DC	"] ",$00
+    1078/    E688 :                     
+    1079/    E688 :                     IHEMSG:
+    1080/    E688 : 45 72 72 6F 72 20   	DC	"Error ihex",CR,LF,$00
+             E68E : 69 68 65 78 0D 0A 
+             E694 : 00                
+    1081/    E695 :                     
+    1082/    E695 :                     SHEMSG:
+    1083/    E695 : 45 72 72 6F 72 20   	DC	"Error srec",CR,LF,$00
+             E69B : 73 72 65 63 0D 0A 
+             E6A1 : 00                
+    1084/    E6A2 :                     
+    1085/    E6A2 :                     ERRMSG:
+    1086/    E6A2 : 45 72 72 6F 72 0D   	DC	"Error",CR,LF,$00
+             E6A8 : 0A 00             
+    1087/    E6AA :                     
+    1088/    E6AA :                     DSEP0:
+    1089/    E6AA : 20 3A 00            	DC	" :",$00
+    1090/    E6AD :                     DSEP1:
+    1091/    E6AD : 20 3A 20 00         	DC	" : ",$00
+    1092/    E6B1 :                     IHEXER:
+    1093/    E6B1 : 3A 30 30 30 30 30           DC	":00000001FF",CR,LF,$00
+             E6B7 : 30 30 31 46 46 0D 
+             E6BD : 0A 00             
+    1094/    E6BF :                     SRECER:
+    1095/    E6BF : 53 39 30 33 30 30           DC	"S9030000FC",CR,LF,$00
+             E6C5 : 30 30 46 43 0D 0A 
+             E6CB : 00                
+    1096/    E6CC :                     
+    1097/    E6CC : =>TRUE               	IF USE_IDENT
+    1098/    E6CC : 55 6E 6B 6E 6F 77   IMUK:	FCB	"Unknown",CR,LF,$00
+             E6D2 : 6E 0D 0A 00       
+    1099/    E6D6 : 4D 43 36 38 30 30   IM6800:	FCB	"MC6800",CR,LF,$00
+             E6DC : 0D 0A 00          
+    1100/    E6DF : 4D 43 36 38 30 31   IM6801:	FCB	"MC6801",CR,LF,$00
+             E6E5 : 0D 0A 00          
+    1101/    E6E8 : 48 44 36 33 30 31   IM6301:	FCB	"HD6301",CR,LF,$00
+             E6EE : 0D 0A 00          
+    1102/    E6F1 : 4D 42 38 38 36 31   IM8861:	FCB	"MB8861",CR,LF,$00
+             E6F7 : 0D 0A 00          
+    1103/    E6FA : [1097]               	ENDIF
+    1104/    E6FA :                     	
+    1105/    E6FA : =>TRUE               	IF USE_REGCMD
+    1106/    E6FA :                     
+    1107/    E6FA : 53 57 49 0D 0A 00   SWIMSG:	DC	"SWI",CR,LF,$00
+    1108/    E700 :                     
+    1109/    E700 : 41 3D 00            RDSA:	DC	"A=",$00
+    1110/    E703 : 20 42 3D 00         RDSB:	DC	" B=",$00
+    1111/    E707 : 20 58 3D 00         RDSX:	DC	" X=",$00
+    1112/    E70B : 20 53 50 3D 00      RDSSP:	DC	" SP=",$00
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 21 - 01/05/23 16:58:03
+
+
+    1113/    E710 : 20 50 43 3D 00      RDSPC:	DC	" PC=",$00
+    1114/    E715 : 20 43 43 52 3D 00   RDSCC:	DC	" CCR=",$00
+    1115/    E71B :                     
+    1116/    E71B :                     RNTAB:
+    1117/    E71B : 41 01               	DC	'A',1
+    1118/    E71D : 00 DC E7 43         	DC.W	REGA,RNA
+    1119/    E721 : 42 01               	DC	'B',1
+    1120/    E723 : 00 DD E7 45         	DC.W	REGB,RNB
+    1121/    E727 : 58 02               	DC	'X',2
+    1122/    E729 : 00 DE E7 47         	DC.W	REGX,RNX
+    1123/    E72D : 53 02               	DC	'S',2
+    1124/    E72F : 00 E0 E7 49         	DC.W	REGSP,RNSP
+    1125/    E733 : 50 02               	DC	'P',2
+    1126/    E735 : 00 E0 E7 4C         	DC.W	REGSP,RNPC
+    1127/    E739 : 43 01               	DC	'C',1
+    1128/    E73B : 00 E4 E7 4F         	DC.W	REGCC,RNCC
+    1129/    E73F :                     
+    1130/    E73F : 00 00               	DC	$00,0		; End mark
+    1131/    E741 : 00 00               	DC.W	0
+    1132/    E743 :                     
+    1133/    E743 : 41 00               RNA:	DC	"A",$00
+    1134/    E745 : 42 00               RNB:	DC	"B",$00
+    1135/    E747 : 58 00               RNX:	DC	"X",$00
+    1136/    E749 : 53 50 00            RNSP:	DC	"SP",$00
+    1137/    E74C : 50 43 00            RNPC:	DC	"PC",$00
+    1138/    E74F : 43 43 52 00         RNCC:	DC	"CCR",$00
+    1139/    E753 :                     
+    1140/    E753 : [1105]               	ENDIF
+    1141/    E753 :                     
+    1142/    E753 : =>TRUE               	IF USE_DEV_6850
+    1143/    E753 :                     	INCLUDE	"dev/dev_6850.asm"
+(1)    1/    E753 :                     ;;;
+(1)    2/    E753 :                     ;;;	MC6850 (ACIA) Console Driver
+(1)    3/    E753 :                     ;;; 
+(1)    4/    E753 :                     
+(1)    5/    E753 :                     INIT:
+(1)    6/    E753 : 86 03               	LDAA	#$03		; Master reset
+(1)    7/    E755 : B7 80 18            	STAA	ACIAC
+(1)    8/    E758 : 01                  	NOP
+(1)    9/    E759 : 01                  	NOP
+(1)   10/    E75A : 86 15               	LDAA	#ACCR_V
+(1)   11/    E75C : B7 80 18            	STAA	ACIAC
+(1)   12/    E75F :                     
+(1)   13/    E75F : 39                  	RTS
+(1)   14/    E760 :                     	
+(1)   15/    E760 :                     CONIN:
+(1)   16/    E760 : B6 80 18            	LDAA	ACIAC
+(1)   17/    E763 : 84 01               	ANDA	#$01
+(1)   18/    E765 : 27 F9               	BEQ	CONIN
+(1)   19/    E767 : B6 80 19            	LDAA	ACIAD
+(1)   20/    E76A :                     
+(1)   21/    E76A : 39                  	RTS
+(1)   22/    E76B :                     	
+(1)   23/    E76B :                     CONST:
+(1)   24/    E76B : B6 80 18            	LDAA	ACIAC
+(1)   25/    E76E : 84 01               	ANDA	#$01
+(1)   26/    E770 :                     
+(1)   27/    E770 : 39                  	RTS
+(1)   28/    E771 :                     	
+(1)   29/    E771 :                     CONOUT:
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm(dev_6850.asm) - Page 22 - 01/05/23 16:58:03
+
+
+(1)   30/    E771 : 36                  	PSHA
+(1)   31/    E772 :                     CO0:
+(1)   32/    E772 : B6 80 18            	LDAA	ACIAC
+(1)   33/    E775 : 84 02               	ANDA	#$02
+(1)   34/    E777 : 27 F9               	BEQ	CO0
+(1)   35/    E779 : 32                  	PULA
+(1)   36/    E77A : B7 80 19            	STAA	ACIAD
+(1)   37/    E77D :                     
+(1)   38/    E77D : 39                  	RTS
+(1)   39/    E77E :                     	
+(1)   40/    E77E :                     
+    1144/    E77E : [1142]               	ENDIF
+    1145/    E77E :                     	
+    1146/    E77E : =>FALSE              	IF USE_DEV_6801
+    1147/    E77E :                     	INCLUDE	"dev/dev_6801.asm"
+    1148/    E77E : [1146]               	ENDIF
+    1149/    E77E :                     
+    1150/    E77E :                     	;;
+    1151/    E77E :                     	;; Entry point
+    1152/    E77E :                     	;;
+    1153/    E77E :                     
+    1154/    FF80 :                     	ORG	ENTRY+0		; Cold start
+    1155/    FF80 :                     E_CSTART:
+    1156/    FF80 : 7E E0 00            	JMP	CSTART
+    1157/    FF83 :                     
+    1158/    FF88 :                     	ORG	ENTRY+8		; Warm start
+    1159/    FF88 :                     E_WSTART:
+    1160/    FF88 : 7E E0 73            	JMP	WSTART
+    1161/    FF8B :                     
+    1162/    FF90 :                     	ORG	ENTRY+16	; Console output
+    1163/    FF90 :                     E_CONOUT:
+    1164/    FF90 : 7E E7 71            	JMP	CONOUT
+    1165/    FF93 :                     
+    1166/    FF98 :                     	ORG	ENTRY+24	; (Console) String output
+    1167/    FF98 :                     E_STROUT:
+    1168/    FF98 : 7E E5 4F            	JMP	STROUT
+    1169/    FF9B :                     
+    1170/    FFA0 :                     	ORG	ENTRY+32	; Console input
+    1171/    FFA0 :                     E_CONIN:
+    1172/    FFA0 : 7E E7 60            	JMP	CONIN
+    1173/    FFA3 :                     
+    1174/    FFA8 :                     	ORG	ENTRY+40	; Console status
+    1175/    FFA8 :                     E_CONST:
+    1176/    FFA8 : 7E E7 6B            	JMP	CONST
+    1177/    FFAB :                     	
+    1178/    FFAB :                     	;;
+    1179/    FFAB :                     	;; Vector Area
+    1180/    FFAB :                     	;;
+    1181/    FFAB :                     	
+    1182/    FFF8 :                     	ORG	$fff8
+    1183/    FFF8 :                     
+    1184/    FFF8 : E6 69               	DC.W	DUMMYH		; IRQ
+    1185/    FFFA :                     
+    1186/    FFFA : E6 42               	DC.W	SWIH		; SWI
+    1187/    FFFC :                     
+    1188/    FFFC : E6 69               	DC.W	DUMMYH		; NMI
+    1189/    FFFE :                     
+    1190/    FFFE : E0 00               	DC.W	CSTART		; RESET
+    1191/   10000 :                     
+    1192/   10000 :                     	;;
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 23 - 01/05/23 16:58:03
+
+
+    1193/   10000 :                     	;; Work Area
+    1194/   10000 :                     	;;
+    1195/   10000 :                     
+    1196/      C0 :                     	ORG	WORK_B
+    1197/      C0 :                     	
+    1198/      C0 :                     INBUF:	DS	BUFLEN		; Line input buffer
+    1199/      D0 :                     DSADDR:	DS	2		; Dump start address
+    1200/      D2 :                     DEADDR:	DS	2		; Dump end address
+    1201/      D4 :                     DSTATE:	DS	1		; Dump state
+    1202/      D5 :                     GADDR:	DS	2		; Go address
+    1203/      D7 :                     SADDR:	DS	2		; Set address
+    1204/      D9 :                     HEXMOD:	DS	1		; HEX file mode
+    1205/      DA :                     RECTYP:	DS	1		; Record type
+    1206/      DB :                     PSPEC:	DS	1		; Processor spec.
+    1207/      DC :                     	
+    1208/      DC : =>TRUE               	IF USE_REGCMD
+    1209/      DC :                     REGA:	DS	1		; Accumulator A
+    1210/      DD :                     REGB:	DS	1		; Accumulator B
+    1211/      DE :                     REGX:	DS	2		; Index register X
+    1212/      E0 :                     REGSP:	DS	2		; Stack pointer SP
+    1213/      E2 :                     REGPC:	DS	2		; Program counter PC
+    1214/      E4 :                     REGCC:	DS	1		; Condition code register CCR
+    1215/      E5 : [1208]               	ENDIF
+    1216/      E5 :                     	
+    1217/      E5 :                     RHVAL:	DS	2		; RDHEX Value
+    1218/      E7 :                     DMPPT:	DS	2		; DUMP pointer
+    1219/      E9 :                     ASCPT:	DS	2		; ASCII pointer
+    1220/      EB :                     CKSUM:	DS	1		; Checksum
+    1221/      EC :                     
+    1222/      EC :                     	END
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 24 - 01/05/23 16:58:03
+
+
+  Symbol Table (* = unused):
+  --------------------------
+
+ ACCR_V :                        15 - |  ACIAC :                       8018 - |
+ ACIAD :                       8019 - |
+*ARCHITECTURE :                                      "x86_64-unknown-linux" - |
+ ASCPT :                         E9 C |  BS :                             8 - |
+ BUFLEN :                        10 - | *CASESENSITIVE :                  0 - |
+ CKSUM :                         EB C |  CO0 :                         E772 C |
+*COMPMODE :                       0 - |  CONIN :                       E760 C |
+ CONOUT :                      E771 C |  CONST :                       E76B C |
+*CONSTPI :        3.141592653589793 - |  CR :                             D - |
+ CRLF :                        E598 C |  CSTART :                      E000 C |
+*DATE :                  "01/05/23" - |  DEADDR :                        D2 C |
+ DEL :                           7F - |  DMPPT :                         E7 C |
+ DP0 :                         E0D9 C |  DP1 :                         E0FB C |
+ DPB :                         E183 C |  DPB0 :                        E198 C |
+ DPB1 :                        E1AD C |  DPB2 :                        E1B1 C |
+ DPBE :                        E1D8 C |  DPL :                         E144 C |
+ DPL0 :                        E158 C |  DPL1 :                        E168 C |
+ DPL2 :                        E178 C |  DPL3 :                        E17D C |
+ DPM :                         E111 C |  DPM0 :                        E11E C |
+ DPM1 :                        E136 C |  DSADDR :                        D0 C |
+ DSEP0 :                       E6AA C |  DSEP1 :                       E6AD C |
+ DSTATE :                        D4 C |  DUMMYH :                      E669 C |
+ DUMP :                        E0BA C |  ENTRY :                       FF80 - |
+ ERR :                         E0B2 C |  ERRMSG :                      E6A2 C |
+*E_CONIN :                     FFA0 C | *E_CONOUT :                    FF90 C |
+*E_CONST :                     FFA8 C | *E_CSTART :                    FF80 C |
+*E_STROUT :                    FF98 C | *E_WSTART :                    FF88 C |
+*FALSE :                          0 - | *FULLPMMU :                       1 - |
+ G0 :                          E1EE C |  GADDR :                         D5 C |
+ GETLIN :                      E5A2 C |  GL0 :                         E5A6 C |
+ GLB :                         E5CE C |  GLE :                         E5E4 C |
+ GO :                          E1D9 C |  GO0 :                         E1E7 C |
+ GO1 :                         E1F6 C | *HAS64 :                          1 - |
+*HASFPU :                         0 - | *HASPMMU :                        0 - |
+ HEXIN :                       E572 C |  HEXMOD :                        D9 C |
+ HEXOUT1 :                     E565 C |  HEXOUT2 :                     E55D C |
+ HEXOUT4 :                     E55A C |  HEXOUTE :                     E56F C |
+ HI0 :                         E579 C |  HI1 :                         E593 C |
+ HIR :                         E596 C |  IDE :                         E06E C |
+ ID_6301 :                     E059 C |  ID_6801 :                     E052 C |
+ ID_8861 :                     E060 C |  ID_UK :                       E067 C |
+ IHEMSG :                      E688 C |  IHEXER :                      E6B1 C |
+ IM6301 :                      E6E8 C |  IM6800 :                      E6D6 C |
+ IM6801 :                      E6DF C |  IM8861 :                      E6F1 C |
+ IMUK :                        E6CC C |  INBUF :                         C0 C |
+ INIT :                        E753 C | *INSUPMODE :                      0 - |
+ LF :                             A - |  LH0 :                         E282 C |
+*LH1 :                         E28C C |  LH2 :                         E290 C |
+ LH3 :                         E298 C |  LHI0 :                        E29D C |
+ LHI1 :                        E2CF C |  LHI2 :                        E2E0 C |
+ LHI3 :                        E2E3 C |  LHIE :                        E2F2 C |
+ LHS0 :                        E2FB C |  LHS1 :                        E32A C |
+ LHS2 :                        E33E C |  LHS20 :                       E33F C |
+ LHS3 :                        E342 C |  LHSE :                        E35C C |
+ LHSR :                        E362 C | *LISTON :                         1 - |
+ LOADH :                       E274 C |  M00 :                         E08F C |
+ M01 :                         E096 C |  M02 :                         E09D C |
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 25 - 01/05/23 16:58:03
+
+
+ M03 :                         E0A4 C |  M04 :                         E0AB C |
+ M05 :                         E0B2 C | *MACEXP :                         7 - |
+*MOMCPU :                      6800 - | *MOMCPUNAME :                "6800" - |
+*NESTMAX :                      100 - |  OPNMSG :                      E66A C |
+*PADDING :                        0 - |  PROMPT :                      E685 C |
+ PSPEC :                         DB C |  RDHEX :                       E5FE C |
+ RDSA :                        E700 C |  RDSB :                        E703 C |
+ RDSCC :                       E715 C |  RDSPC :                       E710 C |
+ RDSSP :                       E70B C |  RDSX :                        E707 C |
+ RDUMP :                       E504 C |  RECTYP :                        DA C |
+ REG :                         E476 C |  REGA :                          DC C |
+ REGB :                          DD C |  REGCC :                         E4 C |
+ REGPC :                         E2 C |  REGSP :                         E0 C |
+ REGX :                          DE C | *RELAXED :                        0 - |
+ RG0 :                         E486 C |  RG1 :                         E48B C |
+ RG2 :                         E49B C |  RG3 :                         E4C4 C |
+ RG4 :                         E4CE C |  RG5 :                         E4F6 C |
+ RG6 :                         E4FE C |  RGE :                         E501 C |
+ RGR :                         E4FE C |  RH0 :                         E605 C |
+ RH1 :                         E61B C |  RHE :                         E641 C |
+ RHVAL :                         E5 C |  RNA :                         E743 C |
+ RNB :                         E745 C |  RNCC :                        E74F C |
+ RNPC :                        E74C C |  RNSP :                        E749 C |
+ RNTAB :                       E71B C |  RNX :                         E747 C |
+ ROM_B :                       E000 - |  SADDR :                         D7 C |
+ SAVEH :                       E365 C |  SETM :                        E20C C |
+ SH0 :                         E373 C |  SH1 :                         E376 C |
+ SH2 :                         E3A4 C |  SH3 :                         E3B7 C |
+ SH4 :                         E3CE C |  SHE :                         E3A1 C |
+ SHEMSG :                      E695 C |  SHL :                         E3D7 C |
+ SHL0 :                        E3E4 C | *SHLI :                        E3F5 C |
+ SHLI0 :                       E41C C |  SHLS :                        E434 C |
+ SHLS0 :                       E45E C |  SKIPSP :                      E5E9 C |
+ SM1 :                         E221 C |  SM2 :                         E24E C |
+ SM3 :                         E259 C |  SM4 :                         E260 C |
+ SMER :                        E271 C |  SRECER :                      E6BF C |
+ SSE :                         E5F2 C |  STACK :                         FF - |
+ STROE :                       E559 C |  STROUT :                      E54F C |
+ SWIH :                        E642 C |  SWIMSG :                      E6FA C |
+*TARGET :                  "MC6800" - | *TIME :                  "16:58:02" - |
+*TRUE :                           1 - |  UPE :                         E5FD C |
+ UPPER :                       E5F3 C |  USE_DEV_6801 :                   0 - |
+ USE_DEV_6850 :                   1 - |  USE_IDENT :                      1 - |
+ USE_REGCMD :                     1 - | *VERSION :                     142F - |
+ WORK_B :                        C0 - |  WSTART :                      E073 C |
+
+    202 symbols
+     30 unused symbols
+
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 26 - 01/05/23 16:58:03
+
+
+  Defined Functions:
+  ------------------
+
+HIGH                                  | LOW                                  
+
+ AS V1.42 Beta [Bld 235] - Source File unimon_6800.asm - Page 27 - 01/05/23 16:58:03
+
+
+  Code Pages:
+  ----------
+
+STANDARD (0 changed characters)
+
+1 code page
+
+0.02 seconds assembly time
+
+   1334 lines source file
+      3 passes
+      0 errors
+      0 warnings
